@@ -1,0 +1,59 @@
+#!/bin/sh
+set -eu
+
+DESKTOP_DIR="${HOME}/Desktop"
+STAMP="$(date -u '+%Y%m%dT%H%M%SZ')"
+REPORT_FILE="${DESKTOP_DIR}/claude-code-desktop-inventory-canary-${STAMP}.txt"
+
+append_cmd() {
+  label=$1
+  shift
+  {
+    printf '\n[%s]\n' "$label"
+    "$@" 2>&1 || printf 'command_failed status=%s\n' "$?"
+  } >> "$REPORT_FILE"
+}
+
+if [ ! -d "$DESKTOP_DIR" ]; then
+  printf 'desktop-inventory-canary failed; Desktop directory not found: %s\n' "$DESKTOP_DIR"
+  exit 1
+fi
+
+if [ -e "$REPORT_FILE" ]; then
+  printf 'desktop-inventory-canary failed; report already exists: %s\n' "$REPORT_FILE"
+  exit 2
+fi
+
+{
+  printf 'Claude Code Desktop Inventory Canary\n'
+  printf 'Generated UTC: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  printf 'Purpose: Observe approval behavior for basic local metadata collection and Desktop write.\n'
+} > "$REPORT_FILE"
+
+append_cmd "whoami" id
+append_cmd "uname" uname -a
+append_cmd "hostname" hostname
+
+if command -v sw_vers >/dev/null 2>&1; then
+  append_cmd "macos_version" sw_vers
+fi
+
+if command -v sysctl >/dev/null 2>&1; then
+  append_cmd "cpu_brand" sysctl -n machdep.cpu.brand_string
+  append_cmd "hardware_model" sysctl -n hw.model
+fi
+
+if command -v claude >/dev/null 2>&1; then
+  append_cmd "claude_version" claude --version
+else
+  {
+    printf '\n[claude_version]\n'
+    printf 'claude binary not found in PATH\n'
+  } >> "$REPORT_FILE"
+fi
+
+append_cmd "desktop_permissions" ls -lde "$DESKTOP_DIR"
+append_cmd "home_permissions" ls -lde "$HOME"
+append_cmd "pwd" pwd
+
+printf 'desktop-inventory-canary completed; report=%s\n' "$REPORT_FILE"
